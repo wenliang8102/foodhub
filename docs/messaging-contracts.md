@@ -1,32 +1,29 @@
-# FoodHub RabbitMQ contracts
+# FoodHub RabbitMQ 消息契约
 
-This document defines the minimum asynchronous contract between
-`foodhub-coupon` and `foodhub-order`. The contract is versioned independently
-from either service implementation.
+本文定义 `foodhub-coupon` 和 `foodhub-order` 之间的最小异步通信契约。
+契约版本独立于两个服务的具体实现进行管理。
 
-## Topology
+## 拓扑
 
-| Item | Value |
+| 项目 | 值 |
 | --- | --- |
 | Exchange | `foodhub.business` |
-| Exchange type | `topic` |
-| Serialization | JSON, UTF-8 |
-| Delivery | persistent message, manual consumer acknowledgement |
+| Exchange 类型 | `topic` |
+| 序列化 | JSON、UTF-8 |
+| 投递方式 | 持久化消息，消费者手动确认 |
 
-The exchange and routing keys are declared in
-`foodhub-common-messaging`. Producers and consumers must use those constants
-instead of repeating string literals.
+Exchange、路由键和队列名称统一声明在 `foodhub-common-messaging` 中。
+生产者和消费者必须使用这些常量，不要在业务代码中重复写字符串。
 
-| Flow | Routing key | Queue | Producer | Consumer |
+| 流程 | Routing key | Queue | 生产者 | 消费者 |
 | --- | --- | --- | --- | --- |
-| Seckill order creation | `coupon.seckill.order.create.v1` | `foodhub.order.seckill-order-create.v1` | `foodhub-coupon` | `foodhub-order` |
-| Order cancellation / inventory release | `order.cancelled.v1` | `foodhub.coupon.order-cancelled.v1` | `foodhub-order` | `foodhub-coupon` |
+| 创建秒杀订单 | `coupon.seckill.order.create.v1` | `foodhub.order.seckill-order-create.v1` | `foodhub-coupon` | `foodhub-order` |
+| 订单取消 / 库存释放 | `order.cancelled.v1` | `foodhub.coupon.order-cancelled.v1` | `foodhub-order` | `foodhub-coupon` |
 
-## Seckill order creation
+## 创建秒杀订单
 
-`foodhub-coupon` publishes `SeckillOrderCreateCommand` after the activity has
-been checked and Redis inventory has been reserved. `foodhub-order` consumes it
-and creates a `PENDING_PAY` order.
+`foodhub-coupon` 完成活动校验并在 Redis 中预扣库存后，发布
+`SeckillOrderCreateCommand`。`foodhub-order` 消费该消息并创建一个 `PENDING_PAY` 订单。
 
 ```json
 {
@@ -43,14 +40,13 @@ and creates a `PENDING_PAY` order.
 }
 ```
 
-`targetType` is `FOOD_ITEM` or `COUPON`, and `targetId` identifies the selected
-object. `activityId` is always the inventory and idempotency scope.
+`targetType` 的取值为 `FOOD_ITEM` 或 `COUPON`，`targetId` 表示被秒杀对象。
+`activityId` 始终是库存和幂等控制的业务范围。
 
-## Order cancellation
+## 订单取消
 
-`foodhub-order` publishes `OrderCancelledEvent` after an order transitions to
-`CANCELLED` and inventory must be released. `foodhub-coupon` consumes it and
-returns the reserved quantity to the activity inventory.
+当订单转换为 `CANCELLED` 且需要释放库存时，`foodhub-order` 发布
+`OrderCancelledEvent`。`foodhub-coupon` 消费该事件，并将预扣数量返还到活动库存。
 
 ```json
 {
@@ -66,32 +62,24 @@ returns the reserved quantity to the activity inventory.
 }
 ```
 
-## Reliability rules
+## 可靠性规则
 
-- `messageId` identifies one published message and is required in logs and
-  consumer deduplication records.
-- `requestId` identifies the original seckill request. The order service must
-  not create two orders for the same `requestId` (or the same user/activity
-  pair, according to its database constraint).
-- Consumers use manual acknowledgement. A message is acknowledged only after
-  the local transaction succeeds; transient failures are retried and terminal
-  failures go to a dead-letter path when that infrastructure is added.
-- Cancellation handling is state-based and idempotent. Re-delivery of an
-  already processed cancellation must not restore inventory twice.
-- The producer must publish a persistent message and use publisher confirms in
-  the implementation phase. The contract itself does not prescribe a specific
-  retry or dead-letter exchange.
-- Consumers must tolerate unknown JSON fields to allow additive fields in a
-  later `v1` patch. Removing or changing the meaning of an existing field
-  requires a new routing-key and queue version.
+- `messageId` 标识一条已发布的消息，必须写入日志和消费者去重记录。
+- `requestId` 标识原始秒杀请求。订单服务不得因同一个 `requestId` 重复创建订单；
+  也可以通过用户与活动组合的数据库约束进行兜底。
+- 消费者使用手动确认。只有本地事务成功后才能确认消息；临时故障需要重试，
+  终态失败在补充相关基础设施后进入死信路径。
+- 取消处理必须基于状态并具备幂等性。重复投递已经处理过的取消事件时，不得重复恢复库存。
+- 实现阶段生产者必须发布持久化消息并启用 publisher confirms。契约本身不限制具体的重试或死信交换机方案。
+- 消费者必须忽略未知 JSON 字段，以支持后续在 `v1` 中追加字段。删除已有字段或改变字段含义时，
+  必须升级 routing key 和 queue 版本。
 
-## Java types
+## Java 类型
 
-The shared module exposes only these integration types:
+公共模块只暴露以下集成类型：
 
-- `RabbitMqContracts`: exchange, routing-key, and queue names.
-- `SeckillOrderCreateCommand`: coupon-to-order command.
-- `OrderCancelledEvent`: order-to-coupon inventory release event.
+- `RabbitMqContracts`：Exchange、routing key 和 queue 名称。
+- `SeckillOrderCreateCommand`：从 coupon 发往 order 的创建订单命令。
+- `OrderCancelledEvent`：从 order 发往 coupon 的库存释放事件。
 
-Business entities, database mappers, and service implementations stay in their
-own modules.
+业务 Entity、数据库 Mapper 和服务实现仍保留在各自模块中。

@@ -1,21 +1,17 @@
-# ADR 0001: Modular monorepo with layered services
+# ADR 0001：采用分层服务的 Maven 单仓库
 
-- Status: Accepted
-- Date: 2026-09-12
+- 状态：已接受
+- 日期：2026-09-12
 
-## Decision
+## 决策
 
-Use a Maven multi-module monorepo. Split deployable modules by business
-capability and use Controller-Service-Mapper layering inside business services.
-Keep authentication and user accounts together initially, and keep coupons and
-seckill activities together initially.
+使用 Maven 多模块单仓库。按照业务能力拆分可部署模块，并在业务服务内部采用
+`Controller-Service-Mapper` 分层。第一阶段将认证与用户账号放在同一个服务中，
+优惠券与秒杀活动也先放在同一个服务中。
 
-## Consequences
+## 影响
 
-- One build validates cross-module compatibility.
-- Services remain independently runnable and deployable.
-- Shared modules require discipline and cannot contain business persistence
-  models.
-- Complex order and seckill rules may gain a dedicated `domain` package when
-  their behavior warrants it.
-
+- 一次构建即可校验模块之间的兼容性。
+- 各服务仍然可以独立运行和部署。
+- 公共模块需要严格控制边界，不得包含业务持久化模型。
+- 当订单和秒杀规则变复杂时，可以在对应服务内部增加独立的 `domain` 包。
