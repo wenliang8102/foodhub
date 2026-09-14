@@ -1,0 +1,40 @@
+server:
+  port: ${SERVER_PORT:8101}
+
+spring:
+  application:
+    name: foodhub-auth
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/foodhub_auth?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:foodhub_dev}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  flyway:
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        fail-fast: false
+
+foodhub:
+  security:
+    jwt:
+      secret: ${FOODHUB_JWT_SECRET:foodhub-local-development-secret-change-me-2026}
+      ttl: ${FOODHUB_JWT_TTL:PT2H}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

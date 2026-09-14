@@ -1,0 +1,55 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: foodhub-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        fail-fast: false
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://foodhub-auth
+              predicates:
+                - Path=/api/auth/**,/api/users/**
+            - id: merchant-service
+              uri: lb://foodhub-merchant
+              predicates:
+                - Path=/api/merchants/**,/api/categories/**,/api/foods/**
+            - id: social-service
+              uri: lb://foodhub-social
+              predicates:
+                - Path=/api/posts/**,/api/follows/**,/api/feed/**
+            - id: coupon-service
+              uri: lb://foodhub-coupon
+              predicates:
+                - Path=/api/coupons/**,/api/seckill/**
+            - id: order-service
+              uri: lb://foodhub-order
+              predicates:
+                - Path=/api/orders/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+foodhub:
+  security:
+    jwt:
+      secret: ${FOODHUB_JWT_SECRET:foodhub-local-development-secret-change-me-2026}
+      ttl: ${FOODHUB_JWT_TTL:PT2H}
