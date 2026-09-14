@@ -17,6 +17,13 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:foodhub}
     password: ${RABBITMQ_PASSWORD:foodhub_dev}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
   flyway:
     locations: classpath:db/migration
   cloud:
@@ -34,4 +41,3 @@ management:
     health:
       probes:
         enabled: true
-
