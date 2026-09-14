@@ -1,178 +1,168 @@
-# Social Post Minimum Loop Design
+# Social 帖子最小闭环设计
 
-## Scope
+## 实现范围
 
-Implement the first `foodhub-social` delivery as a post-only minimum loop:
+`foodhub-social` 第一个交付版本只实现帖子最小闭环：
 
-- publish a post;
-- list visible posts with pagination;
-- view one visible post;
-- soft-delete a post owned by the current user.
+- 发布帖子；
+- 分页查询可见帖子；
+- 查看单个可见帖子；
+- 帖子作者软删除自己的帖子。
 
-This delivery does not implement follows, likes, comments, favorites, or the
-feed. It does not modify or import code from `foodhub-merchant`. It also does
-not change shared modules, the gateway, authentication, infrastructure, or the
-root Maven build.
+本次不实现关注、点赞、评论、收藏或关注动态流。不修改或导入
+`foodhub-merchant` 中的代码，也不修改公共模块、网关、认证服务、基础设施或
+根 Maven 构建配置。
 
-## Architecture
+## 系统架构
 
-The implementation follows the repository's required layering:
+实现遵循仓库规定的分层结构：
 
 ```text
 PostController -> PostService -> PostMapper -> foodhub_social.post
 ```
 
-Request DTOs, persistence entities, and response VOs remain separate.
+请求 DTO、持久化实体和响应 VO 相互分离。
 
-- `PostController` defines the four `/api/posts` endpoints and resolves the
-  current user from `X-User-Id` for protected operations.
-- `CreatePostRequest` validates the request body.
-- `PostService` owns creation, pagination, lookup, ownership checks, JSON
-  conversion, and soft deletion.
-- `PostMapper` owns SQL access to the Social `post` table.
-- `PostEntity` represents persistence state only.
-- `PostView` and `PostPageView` define the public response model.
-- `SocialApplication` imports the existing common exception handler and scans
-  the Social mapper package.
+- `PostController`：定义四个 `/api/posts` 接口，并在受保护操作中从
+  `X-User-Id` 解析当前用户。
+- `CreatePostRequest`：校验创建帖子的请求体。
+- `PostService`：负责创建、分页、详情查询、作者权限校验、JSON 转换和软删除。
+- `PostMapper`：负责访问 Social 服务自己的 `post` 表。
+- `PostEntity`：只表示持久化数据，不直接作为接口响应。
+- `PostView` 和 `PostPageView`：定义对外响应模型。
+- `SocialApplication`：导入现有公共异常处理器，并扫描 Social 的 Mapper 包。
 
-All files remain under `foodhub-social`.
+所有新增和修改的文件都位于 `foodhub-social` 内。
 
-## Data Model
+## 数据模型
 
-Create `foodhub-social/src/main/resources/db/migration/V1__create_social_tables.sql`
-with a `post` table containing:
+新增数据库迁移文件
+`foodhub-social/src/main/resources/db/migration/V1__create_social_tables.sql`，
+并创建 `post` 表：
 
-| Column | Type | Rules |
+| 字段 | 类型 | 规则 |
 | --- | --- | --- |
-| `id` | `BIGINT` | Auto-increment primary key |
-| `author_id` | `BIGINT` | Required; obtained from `X-User-Id` |
-| `content` | `VARCHAR(2000)` | Required, non-blank post content |
-| `image_urls` | `JSON` | Optional array of image URLs |
-| `merchant_id` | `BIGINT` | Optional positive identifier reference only |
-| `status` | `VARCHAR(16)` | `VISIBLE` or `DELETED` |
-| `published_at` | `DATETIME` | Required publication time |
-| `updated_at` | `DATETIME` | Required last-update time |
-| `deleted_at` | `DATETIME` | Set during soft deletion |
+| `id` | `BIGINT` | 自增主键 |
+| `author_id` | `BIGINT` | 必填，从 `X-User-Id` 获取 |
+| `content` | `VARCHAR(2000)` | 必填，非空白帖子正文 |
+| `image_urls` | `JSON` | 可选的图片 URL 数组 |
+| `merchant_id` | `BIGINT` | 可选，只保存正数标识引用 |
+| `status` | `VARCHAR(16)` | 值为 `VISIBLE` 或 `DELETED` |
+| `published_at` | `DATETIME` | 必填，发布时间 |
+| `updated_at` | `DATETIME` | 必填，最后更新时间 |
+| `deleted_at` | `DATETIME` | 软删除时记录删除时间 |
 
-Add an index on `(status, published_at, id)` for visible-post pagination.
-Social stores `merchant_id` but does not query the Merchant database, call the
-Merchant service, or validate that the referenced merchant exists.
+为 `(status, published_at, id)` 创建组合索引，用于可见帖子的分页查询。
+Social 只保存 `merchant_id`，不会查询 Merchant 数据库、调用 Merchant 服务，
+也不会验证对应商户是否真实存在。
 
-## Input Contract
+## 输入契约
 
-Post creation accepts:
+创建帖子的请求格式：
 
 ```json
 {
-  "content": "A post about local food",
+  "content": "分享一家本地餐厅",
   "imageUrls": ["https://example.com/image.jpg"],
   "merchantId": 123
 }
 ```
 
-Validation rules:
+校验规则：
 
-- trimmed content length is between 1 and 2000 characters;
-- at most 9 image URLs are accepted;
-- every image URL is at most 2048 characters and is an absolute `http` or
-  `https` URL;
-- `merchantId`, when supplied, is positive;
-- clients never supply the acting author's ID in the body or path.
+- 正文去除首尾空格后长度为 1 到 2000 个字符；
+- 最多允许 9 个图片 URL；
+- 每个图片 URL 最长为 2048 个字符，并且必须是绝对 `http` 或 `https` URL；
+- `merchantId` 如有提供，必须为正数；
+- 客户端不能通过请求体或路径提供当前操作用户的 ID。
 
-Image URLs are represented as `List<String>` at the API boundary and encoded
-as JSON for persistence.
+图片地址在 API 层使用 `List<String>` 表示，持久化前编码为 JSON。
 
-## HTTP API
+## HTTP 接口
 
-### Publish
+### 发布帖子
 
 `POST /api/posts`
 
-Requires `X-User-Id`. Creates a visible post and returns its `PostView` inside
-`ApiResponse`.
+必须提供 `X-User-Id`。创建一个可见帖子，并使用 `ApiResponse` 包装返回
+`PostView`。
 
-### List
+### 帖子列表
 
 `GET /api/posts?page=1&pageSize=20`
 
-Public endpoint. `page` starts at 1, `pageSize` defaults to 20 and may not
-exceed 100. Only `VISIBLE` rows are returned, ordered by
-`published_at DESC, id DESC`. The response contains `page`, `pageSize`,
-`total`, and `items`.
+公开接口。`page` 从 1 开始；`pageSize` 默认为 20，最大为 100。只返回
+`VISIBLE` 状态的记录，按照 `published_at DESC, id DESC` 排序。响应包含
+`page`、`pageSize`、`total` 和 `items`。
 
-### Detail
+### 帖子详情
 
 `GET /api/posts/{postId}`
 
-Public endpoint. Returns only a visible post. A missing or deleted post produces
-`POST_NOT_FOUND`.
+公开接口。只返回可见帖子。帖子不存在或已经删除时返回
+`POST_NOT_FOUND`。
 
-### Delete
+### 删除帖子
 
 `DELETE /api/posts/{postId}`
 
-Requires `X-User-Id`. Only the author may delete the post. Deletion changes the
-status to `DELETED` and records `deleted_at`. Repeated deletion produces
-`POST_NOT_FOUND`; an attempt by another user produces `POST_FORBIDDEN`.
+必须提供 `X-User-Id`。只有作者可以删除帖子。删除时将状态改为
+`DELETED`，并记录 `deleted_at`。重复删除返回 `POST_NOT_FOUND`，其他用户
+尝试删除时返回 `POST_FORBIDDEN`。
 
-## Response Model
+## 响应模型
 
-`PostView` exposes:
+`PostView` 对外提供以下字段：
 
-- `id`;
-- `authorId`;
-- `content`;
-- `imageUrls`;
-- `merchantId`;
-- `publishedAt`.
+- `id`；
+- `authorId`；
+- `content`；
+- `imageUrls`；
+- `merchantId`；
+- `publishedAt`。
 
-Responses use the existing `ApiResponse`. `publishedAt` is an ISO-8601
-timestamp with the explicit `+08:00` offset matching the configured
-`Asia/Shanghai` database timezone.
+所有响应使用现有的 `ApiResponse`。`publishedAt` 使用 ISO-8601 格式，并带有
+明确的 `+08:00` 时区偏移，与数据库配置的 `Asia/Shanghai` 时区保持一致。
 
-## Error Handling
+## 错误处理
 
-Business failures use the existing `BusinessException` and
-`GlobalExceptionHandler`:
+业务错误使用现有的 `BusinessException` 和 `GlobalExceptionHandler`：
 
-| Code | Meaning |
+| 错误码 | 含义 |
 | --- | --- |
-| `INVALID_USER_ID` | `X-User-Id` is absent, malformed, or not positive |
-| `INVALID_IMAGE_URL` | An image is not an absolute HTTP(S) URL |
-| `POST_NOT_FOUND` | The post is absent or no longer visible |
-| `POST_FORBIDDEN` | The current user is not the post author |
-| `POST_DATA_INVALID` | Persisted image JSON cannot be decoded |
+| `INVALID_USER_ID` | `X-User-Id` 缺失、格式错误或不是正数 |
+| `INVALID_IMAGE_URL` | 图片地址不是绝对 HTTP(S) URL |
+| `POST_NOT_FOUND` | 帖子不存在或不再可见 |
+| `POST_FORBIDDEN` | 当前用户不是帖子作者 |
+| `POST_DATA_INVALID` | 无法解析数据库中保存的图片 JSON |
 
-Bean-validation errors continue to use the shared `VALIDATION_ERROR` response.
+Bean Validation 参数校验错误继续使用公共的 `VALIDATION_ERROR` 响应。
 
-## Persistence Flow
+## 持久化流程
 
-Creation trims content, validates URLs, serializes the image list, assigns the
-gateway user ID, and inserts a `VISIBLE` record in one transaction. Reads query
-visible records only. Pagination uses explicit mapper count and page queries,
-so no shared MyBatis pagination configuration is required.
+创建帖子时，系统去除正文首尾空格、验证图片 URL、序列化图片列表、设置网关
+提供的用户 ID，并在一个事务中插入 `VISIBLE` 状态的记录。所有读取操作只查询
+可见记录。分页采用 Mapper 中明确的总数 SQL 和分页 SQL，因此不需要修改公共
+MyBatis 分页配置。
 
-Deletion first reads the visible post, verifies its author, and then performs a
-conditional soft update. A concurrent deletion that wins first is reported as
-`POST_NOT_FOUND`.
+删除帖子时，先读取可见帖子并验证作者，再执行带条件的软删除更新。如果并发
+请求已经先一步删除该帖子，则返回 `POST_NOT_FOUND`。
 
-## Testing
+## 测试策略
 
-Development follows test-driven steps.
+开发过程采用测试驱动方式。
 
-Controller tests cover successful creation, invalid request bodies, missing or
-invalid identity headers, valid pagination, invalid pagination, detail lookup,
-and deletion delegation.
+Controller 测试覆盖：创建成功、请求体校验失败、身份头缺失或无效、分页参数
+有效与无效、查询详情以及删除操作委派。
 
-Service tests cover author assignment, content trimming, image JSON conversion,
-invalid image URLs, visible-post pagination, missing detail, successful owner
-deletion, forbidden deletion, and concurrent/already-deleted behavior.
+Service 测试覆盖：设置正确作者、正文去除首尾空格、图片 JSON 转换、图片 URL
+无效、可见帖子分页、详情不存在、作者成功删除、非作者禁止删除，以及并发或
+重复删除。
 
-The focused verification command is:
+针对 Social 模块及其依赖的验证命令：
 
 ```powershell
 .\mvnw.cmd --batch-mode --no-transfer-progress -pl foodhub-social -am test
 ```
 
-Before handoff, `git diff` must confirm that no `foodhub-merchant` or shared
-module file changed.
+交付前必须使用 `git diff` 确认 `foodhub-merchant` 和公共模块没有发生任何修改。
