@@ -45,4 +45,24 @@ class SocialMigrationContractTest {
             assertTrue(sql.contains("CHECK (follower_id <> following_id)"));
         }
     }
+
+    @Test
+    void interactionMigrationDefinesFactsCountersAndIndexes() throws Exception {
+        try (InputStream stream = getClass().getResourceAsStream(
+                "/db/migration/V3__create_post_interaction_tables.sql")) {
+            assertNotNull(stream, "互动迁移文件必须存在");
+            String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(sql.contains("ADD COLUMN like_count BIGINT NOT NULL DEFAULT 0"));
+            assertTrue(sql.contains("ADD COLUMN favorite_count BIGINT NOT NULL DEFAULT 0"));
+            assertTrue(sql.contains("CREATE TABLE post_like"));
+            assertTrue(sql.contains("UNIQUE KEY uk_post_like_user_post (user_id, post_id)"));
+            assertTrue(sql.contains("CREATE TABLE post_favorite"));
+            assertTrue(sql.contains("UNIQUE KEY uk_post_favorite_user_post (user_id, post_id)"));
+            assertTrue(sql.contains(
+                    "INDEX idx_post_favorite_user_page (user_id, created_at, id)"));
+            assertTrue(sql.contains("CHECK (like_count >= 0)"));
+            assertTrue(sql.contains("CHECK (favorite_count >= 0)"));
+        }
+    }
 }
