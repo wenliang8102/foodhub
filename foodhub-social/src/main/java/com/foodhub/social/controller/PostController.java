@@ -6,6 +6,7 @@ import com.foodhub.social.dto.CreatePostRequest;
 import com.foodhub.social.service.PostService;
 import com.foodhub.social.vo.PostPageView;
 import com.foodhub.social.vo.PostView;
+import com.foodhub.social.web.SocialRequestIdentity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,7 +32,8 @@ public class PostController {
     public ApiResponse<PostView> create(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @Valid @RequestBody CreatePostRequest request) {
-        return ApiResponse.success(postService.create(resolveUserId(userIdHeader), request));
+        return ApiResponse.success(postService.create(
+                SocialRequestIdentity.requireUserId(userIdHeader), request));
     }
 
     @GetMapping
@@ -51,27 +53,8 @@ public class PostController {
     public ApiResponse<Void> delete(
             @PathVariable long postId,
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        postService.delete(postId, resolveUserId(userIdHeader));
+        postService.delete(postId, SocialRequestIdentity.requireUserId(userIdHeader));
         return ApiResponse.success(null);
-    }
-
-    private Long resolveUserId(String userIdHeader) {
-        if (userIdHeader == null || userIdHeader.isBlank()) {
-            throw invalidUserId();
-        }
-        try {
-            long userId = Long.parseLong(userIdHeader);
-            if (userId <= 0) {
-                throw invalidUserId();
-            }
-            return userId;
-        } catch (NumberFormatException exception) {
-            throw invalidUserId();
-        }
-    }
-
-    private BusinessException invalidUserId() {
-        return new BusinessException("INVALID_USER_ID", "X-User-Id 必须为正整数");
     }
 
     private void validatePagination(int page, int pageSize) {
