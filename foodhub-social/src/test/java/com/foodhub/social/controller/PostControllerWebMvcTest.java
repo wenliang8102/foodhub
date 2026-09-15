@@ -1,11 +1,12 @@
 package com.foodhub.social.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.foodhub.common.web.GlobalExceptionHandler;
+import com.foodhub.common.core.BusinessException;
 import com.foodhub.social.dto.CreatePostRequest;
 import com.foodhub.social.service.PostService;
 import com.foodhub.social.vo.PostPageView;
 import com.foodhub.social.vo.PostView;
+import com.foodhub.social.web.SocialExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
@@ -13,7 +14,6 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -115,6 +116,27 @@ class PostControllerWebMvcTest {
     }
 
     @Test
+    void listAcceptsOptionalGatewayUserId() throws Exception {
+        when(postService.list(1, 20, 7L))
+                .thenReturn(new PostPageView(1, 20, 1, List.of(postView())));
+
+        mockMvc.perform(get("/api/posts").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].liked").value(true));
+
+        verify(postService).list(1, 20, 7L);
+    }
+
+    @Test
+    void listRejectsMalformedOptionalGatewayUserId() throws Exception {
+        mockMvc.perform(get("/api/posts").header("X-User-Id", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_USER_ID"));
+
+        verifyNoInteractions(postService);
+    }
+
+    @Test
     void listRejectsInvalidPagination() throws Exception {
         mockMvc.perform(get("/api/posts?page=0&pageSize=101"))
                 .andExpect(status().isBadRequest())
@@ -135,6 +157,17 @@ class PostControllerWebMvcTest {
     }
 
     @Test
+    void detailAcceptsOptionalGatewayUserId() throws Exception {
+        when(postService.detail(5L, 7L)).thenReturn(postView());
+
+        mockMvc.perform(get("/api/posts/5").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.favorited").value(true));
+
+        verify(postService).detail(5L, 7L);
+    }
+
+    @Test
     void deleteUsesGatewayUserId() throws Exception {
         mockMvc.perform(delete("/api/posts/5").header("X-User-Id", "7"))
                 .andExpect(status().isOk())
@@ -152,6 +185,44 @@ class PostControllerWebMvcTest {
         verifyNoInteractions(postService);
     }
 
+    @Test
+    void detailMapsMissingPostToNotFound() throws Exception {
+        when(postService.detail(99L)).thenThrow(
+                new BusinessException("POST_NOT_FOUND", "帖子不存在或已删除"));
+
+        mockMvc.perform(get("/api/posts/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("POST_NOT_FOUND"));
+    }
+
+    @Test
+    void deleteMapsForbiddenPostToForbidden() throws Exception {
+        doThrow(new BusinessException("POST_FORBIDDEN", "只能删除自己发布的帖子"))
+                .when(postService).delete(5L, 8L);
+
+        mockMvc.perform(delete("/api/posts/5").header("X-User-Id", "8"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("POST_FORBIDDEN"));
+    }
+
+    @Test
+    void listMapsMalformedPaginationToBadRequest() throws Exception {
+        mockMvc.perform(get("/api/posts?page=abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void unexpectedFailureDoesNotExposeInternalMessage() throws Exception {
+        when(postService.detail(100L)).thenThrow(
+                new IllegalStateException("sensitive database detail"));
+
+        mockMvc.perform(get("/api/posts/100"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.message").value("服务器内部错误"));
+    }
+
     private PostView postView() {
         return new PostView(
                 5L,
@@ -159,7 +230,12 @@ class PostControllerWebMvcTest {
                 "正文",
                 List.of("https://example.com/a.jpg"),
                 12L,
-                OffsetDateTime.parse("2026-09-14T12:00:00+08:00"));
+                OffsetDateTime.parse("2026-09-14T12:00:00+08:00"),
+                3L,
+                4L,
+                0L,
+                true,
+                true);
     }
 
     @SpringBootConfiguration
@@ -169,11 +245,7 @@ class PostControllerWebMvcTest {
             org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration.class,
             org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration.class
     })
-    @Import(PostController.class)
+    @Import({PostController.class, SocialExceptionHandler.class})
     static class WebTestApplication {
-        @Bean
-        GlobalExceptionHandler globalExceptionHandler() {
-            return new GlobalExceptionHandler();
-        }
     }
 }

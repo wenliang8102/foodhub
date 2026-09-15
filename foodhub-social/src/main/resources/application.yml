@@ -24,9 +24,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       probes:
         enabled: true
 
+foodhub:
+  social:
+    cache:
+      post-detail-ttl-seconds: ${SOCIAL_POST_DETAIL_TTL_SECONDS:300}
+      post-detail-jitter-seconds: ${SOCIAL_POST_DETAIL_JITTER_SECONDS:60}
+      counter-ttl-seconds: ${SOCIAL_COUNTER_TTL_SECONDS:60}
+      counter-jitter-seconds: ${SOCIAL_COUNTER_JITTER_SECONDS:15}
+      null-ttl-seconds: ${SOCIAL_NULL_TTL_SECONDS:30}

@@ -6,9 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodhub.common.core.BusinessException;
 import com.foodhub.social.dto.CreatePostRequest;
 import com.foodhub.social.entity.PostEntity;
+import com.foodhub.social.mapper.InteractionMapper;
 import com.foodhub.social.mapper.PostMapper;
 import com.foodhub.social.vo.PostPageView;
 import com.foodhub.social.vo.PostView;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,11 +30,36 @@ public class PostService {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() { };
 
     private final PostMapper postMapper;
+    private final InteractionMapper interactionMapper;
     private final ObjectMapper objectMapper;
+    private final SocialPostCache postCache;
+    private final SocialMetrics metrics;
+
+    @Autowired
+    public PostService(PostMapper postMapper,
+                       InteractionMapper interactionMapper,
+                       ObjectMapper objectMapper,
+                       ObjectProvider<SocialPostCache> postCache,
+                       SocialMetrics metrics) {
+        this.postMapper = postMapper;
+        this.interactionMapper = interactionMapper;
+        this.objectMapper = objectMapper;
+        this.postCache = postCache.getIfAvailable();
+        this.metrics = metrics;
+    }
+
+    public PostService(PostMapper postMapper,
+                       InteractionMapper interactionMapper,
+                       ObjectMapper objectMapper) {
+        this.postMapper = postMapper;
+        this.interactionMapper = interactionMapper;
+        this.objectMapper = objectMapper;
+        this.postCache = null;
+        this.metrics = null;
+    }
 
     public PostService(PostMapper postMapper, ObjectMapper objectMapper) {
-        this.postMapper = postMapper;
-        this.objectMapper = objectMapper;
+        this(postMapper, null, objectMapper);
     }
 
     @Transactional
@@ -49,28 +77,58 @@ public class PostService {
         post.setPublishedAt(now);
         post.setUpdatedAt(now);
         postMapper.insert(post);
-        return toView(post);
+        incrementMetric("social.post.write", "action", "create");
+        return toView(post, null);
     }
 
     public PostPageView list(int page, int pageSize) {
+        return list(page, pageSize, null);
+    }
+
+    public PostPageView list(int page, int pageSize, Long viewerUserId) {
         validatePagination(page, pageSize);
+        Long normalizedViewerId = optionalUserId(viewerUserId);
         long total = postMapper.countVisible();
         if (total == 0) {
             return new PostPageView(page, pageSize, 0, List.of());
         }
         long offset = (long) (page - 1) * pageSize;
         List<PostView> items = postMapper.selectVisiblePage(offset, pageSize).stream()
-                .map(this::toView)
+                .map(post -> toView(post, normalizedViewerId))
                 .toList();
         return new PostPageView(page, pageSize, total, items);
     }
 
     public PostView detail(long postId) {
-        PostEntity post = postId > 0 ? postMapper.selectVisibleById(postId) : null;
-        if (post == null) {
+        return detail(postId, null);
+    }
+
+    public PostView detail(long postId, Long viewerUserId) {
+        Long normalizedViewerId = optionalUserId(viewerUserId);
+        if (postId <= 0) {
             throw new BusinessException("POST_NOT_FOUND", "帖子不存在或已删除");
         }
-        return toView(post);
+        if (postCache != null && postCache.isNullCached(postId)) {
+            throw new BusinessException("POST_NOT_FOUND", "帖子不存在或已删除");
+        }
+        if (postCache != null) {
+            PostView cached = postCache.getPostDetail(postId).orElse(null);
+            if (cached != null) {
+                return withViewerState(cached, normalizedViewerId);
+            }
+        }
+        PostEntity post = postId > 0 ? postMapper.selectVisibleById(postId) : null;
+        if (post == null) {
+            if (postCache != null) {
+                postCache.putNull(postId);
+            }
+            throw new BusinessException("POST_NOT_FOUND", "帖子不存在或已删除");
+        }
+        PostView anonymousView = toView(post, null);
+        if (postCache != null) {
+            postCache.putPostDetail(anonymousView);
+        }
+        return withViewerState(anonymousView, normalizedViewerId);
     }
 
     @Transactional
@@ -88,12 +146,24 @@ public class PostService {
         if (updated != 1) {
             throw new BusinessException("POST_NOT_FOUND", "帖子不存在或已删除");
         }
+        if (postCache != null) {
+            postCache.evictPost(postId);
+        }
+        incrementMetric("social.post.write", "action", "delete");
     }
 
     private void validateUserId(Long userId) {
         if (userId == null || userId <= 0) {
             throw new BusinessException("INVALID_USER_ID", "X-User-Id 必须为正整数");
         }
+    }
+
+    private Long optionalUserId(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        validateUserId(userId);
+        return userId;
     }
 
     private void validatePagination(int page, int pageSize) {
@@ -151,9 +221,15 @@ public class PostService {
         }
     }
 
-    private PostView toView(PostEntity post) {
+    private PostView toView(PostEntity post, Long viewerUserId) {
         if (post.getPublishedAt() == null) {
             throw new BusinessException("POST_DATA_INVALID", "帖子发布时间缺失");
+        }
+        Boolean liked = null;
+        Boolean favorited = null;
+        if (viewerUserId != null && interactionMapper != null) {
+            liked = interactionMapper.existsLike(viewerUserId, post.getId());
+            favorited = interactionMapper.existsFavorite(viewerUserId, post.getId());
         }
         return new PostView(
                 post.getId(),
@@ -161,6 +237,39 @@ public class PostService {
                 post.getContent(),
                 readImages(post.getImageUrls()),
                 post.getMerchantId(),
-                post.getPublishedAt().atZone(DATABASE_ZONE).toOffsetDateTime());
+                post.getPublishedAt().atZone(DATABASE_ZONE).toOffsetDateTime(),
+                count(post.getLikeCount()),
+                count(post.getFavoriteCount()),
+                count(post.getCommentCount()),
+                liked,
+                favorited);
+    }
+
+    private PostView withViewerState(PostView view, Long viewerUserId) {
+        if (viewerUserId == null || interactionMapper == null) {
+            return view;
+        }
+        return new PostView(
+                view.id(),
+                view.authorId(),
+                view.content(),
+                view.imageUrls(),
+                view.merchantId(),
+                view.publishedAt(),
+                view.likeCount(),
+                view.favoriteCount(),
+                view.commentCount(),
+                interactionMapper.existsLike(viewerUserId, view.id()),
+                interactionMapper.existsFavorite(viewerUserId, view.id()));
+    }
+
+    private void incrementMetric(String name, String... tags) {
+        if (metrics != null) {
+            metrics.increment(name, tags);
+        }
+    }
+
+    private long count(Long value) {
+        return value == null ? 0 : value;
     }
 }
