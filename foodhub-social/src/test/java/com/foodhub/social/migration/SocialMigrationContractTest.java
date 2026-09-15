@@ -65,4 +65,42 @@ class SocialMigrationContractTest {
             assertTrue(sql.contains("CHECK (favorite_count >= 0)"));
         }
     }
+
+    @Test
+    void commentMigrationDefinesCommentTableCounterAndIndexes() throws Exception {
+        try (InputStream stream = getClass().getResourceAsStream(
+                "/db/migration/V4__create_post_comment_table.sql")) {
+            assertNotNull(stream, "评论迁移文件必须存在");
+            String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(sql.contains("ADD COLUMN comment_count BIGINT NOT NULL DEFAULT 0"));
+            assertTrue(sql.contains("CREATE TABLE post_comment"));
+            assertTrue(sql.contains("INDEX idx_post_comment_page (post_id, status, created_at, id)"));
+            assertTrue(sql.contains("CHECK (comment_count >= 0)"));
+            assertTrue(sql.contains("CHECK (status IN ('VISIBLE', 'DELETED'))"));
+        }
+    }
+
+    @Test
+    void moderationMigrationAddsHiddenStateAuditLogAndFeedIndex() throws Exception {
+        try (InputStream stream = getClass().getResourceAsStream(
+                "/db/migration/V5__add_post_moderation.sql")) {
+            assertNotNull(stream, "治理迁移文件必须存在");
+            String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(sql.contains("status IN ('VISIBLE', 'HIDDEN', 'DELETED')"));
+            assertTrue(sql.contains("CREATE TABLE post_moderation_log"));
+            assertTrue(sql.contains("operator_id BIGINT NOT NULL"));
+            assertTrue(sql.contains("reason VARCHAR(500) NOT NULL"));
+        }
+
+        try (InputStream stream = getClass().getResourceAsStream(
+                "/db/migration/V6__add_social_feed_indexes.sql")) {
+            assertNotNull(stream, "Feed 索引迁移文件必须存在");
+            String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(sql.contains("CREATE INDEX idx_post_author_feed"));
+            assertTrue(sql.contains("ON post (author_id, status, published_at, id)"));
+        }
+    }
 }

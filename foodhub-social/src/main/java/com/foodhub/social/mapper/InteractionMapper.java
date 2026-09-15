@@ -120,7 +120,11 @@ public interface InteractionMapper {
                    p.updated_at AS updatedAt,
                    p.deleted_at AS deletedAt,
                    p.like_count AS likeCount,
-                   p.favorite_count AS favoriteCount
+                   p.favorite_count AS favoriteCount,
+                   p.comment_count AS commentCount,
+                   p.hidden_at AS hiddenAt,
+                   p.hidden_by AS hiddenBy,
+                   p.hidden_reason AS hiddenReason
             FROM post_favorite f
             JOIN post p ON p.id = f.post_id
             WHERE f.user_id = #{userId}
@@ -131,4 +135,10 @@ public interface InteractionMapper {
     List<PostEntity> selectVisibleFavoritePage(@Param("userId") long userId,
                                                @Param("offset") long offset,
                                                @Param("limit") int limit);
+
+    @Select("SELECT COUNT(*) FROM post_like WHERE post_id = #{postId}")
+    long countLikesByPostId(@Param("postId") long postId);
+
+    @Select("SELECT COUNT(*) FROM post_favorite WHERE post_id = #{postId}")
+    long countFavoritesByPostId(@Param("postId") long postId);
 }

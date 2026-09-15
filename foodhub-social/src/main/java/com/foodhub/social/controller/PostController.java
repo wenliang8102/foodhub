@@ -38,15 +38,26 @@ public class PostController {
 
     @GetMapping
     public ApiResponse<PostPageView> list(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         validatePagination(page, pageSize);
-        return ApiResponse.success(postService.list(page, pageSize));
+        Long viewerUserId = SocialRequestIdentity.optionalUserId(userIdHeader);
+        if (viewerUserId == null) {
+            return ApiResponse.success(postService.list(page, pageSize));
+        }
+        return ApiResponse.success(postService.list(page, pageSize, viewerUserId));
     }
 
     @GetMapping("/{postId}")
-    public ApiResponse<PostView> detail(@PathVariable long postId) {
-        return ApiResponse.success(postService.detail(postId));
+    public ApiResponse<PostView> detail(
+            @PathVariable long postId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+        Long viewerUserId = SocialRequestIdentity.optionalUserId(userIdHeader);
+        if (viewerUserId == null) {
+            return ApiResponse.success(postService.detail(postId));
+        }
+        return ApiResponse.success(postService.detail(postId, viewerUserId));
     }
 
     @DeleteMapping("/{postId}")

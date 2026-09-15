@@ -21,6 +21,10 @@ public class PostEntity {
     private LocalDateTime deletedAt;
     private Long likeCount;
     private Long favoriteCount;
+    private Long commentCount;
+    private LocalDateTime hiddenAt;
+    private Long hiddenBy;
+    private String hiddenReason;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -44,4 +48,12 @@ public class PostEntity {
     public void setLikeCount(Long likeCount) { this.likeCount = likeCount; }
     public Long getFavoriteCount() { return favoriteCount; }
     public void setFavoriteCount(Long favoriteCount) { this.favoriteCount = favoriteCount; }
+    public Long getCommentCount() { return commentCount; }
+    public void setCommentCount(Long commentCount) { this.commentCount = commentCount; }
+    public LocalDateTime getHiddenAt() { return hiddenAt; }
+    public void setHiddenAt(LocalDateTime hiddenAt) { this.hiddenAt = hiddenAt; }
+    public Long getHiddenBy() { return hiddenBy; }
+    public void setHiddenBy(Long hiddenBy) { this.hiddenBy = hiddenBy; }
+    public String getHiddenReason() { return hiddenReason; }
+    public void setHiddenReason(String hiddenReason) { this.hiddenReason = hiddenReason; }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodhub.common.core.BusinessException;
 import com.foodhub.social.dto.CreatePostRequest;
 import com.foodhub.social.entity.PostEntity;
+import com.foodhub.social.mapper.InteractionMapper;
 import com.foodhub.social.mapper.PostMapper;
 import com.foodhub.social.vo.PostPageView;
 import com.foodhub.social.vo.PostView;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -33,11 +35,14 @@ class PostServiceTest {
     @Mock
     private PostMapper postMapper;
 
+    @Mock
+    private InteractionMapper interactionMapper;
+
     private PostService postService;
 
     @BeforeEach
     void setUp() {
-        postService = new PostService(postMapper, new ObjectMapper());
+        postService = new PostService(postMapper, interactionMapper, new ObjectMapper());
     }
 
     @Test
@@ -86,8 +91,11 @@ class PostServiceTest {
 
     @Test
     void listReturnsVisiblePostsAndPaginationMetadata() {
+        PostEntity post = post(5L, 7L);
+        post.setLikeCount(3L);
+        post.setFavoriteCount(4L);
         when(postMapper.countVisible()).thenReturn(1L);
-        when(postMapper.selectVisiblePage(20L, 20)).thenReturn(List.of(post(5L, 7L)));
+        when(postMapper.selectVisiblePage(20L, 20)).thenReturn(List.of(post));
 
         PostPageView result = postService.list(2, 20);
 
@@ -96,6 +104,23 @@ class PostServiceTest {
         assertEquals(1L, result.total());
         assertEquals(1, result.items().size());
         assertEquals(5L, result.items().getFirst().id());
+        assertEquals(3L, result.items().getFirst().likeCount());
+        assertEquals(4L, result.items().getFirst().favoriteCount());
+        assertNull(result.items().getFirst().liked());
+        assertNull(result.items().getFirst().favorited());
+    }
+
+    @Test
+    void listWithViewerAddsInteractionState() {
+        when(postMapper.countVisible()).thenReturn(1L);
+        when(postMapper.selectVisiblePage(0L, 20)).thenReturn(List.of(post(5L, 7L)));
+        when(interactionMapper.existsLike(10L, 5L)).thenReturn(true);
+        when(interactionMapper.existsFavorite(10L, 5L)).thenReturn(false);
+
+        PostPageView result = postService.list(1, 20, 10L);
+
+        assertEquals(true, result.items().getFirst().liked());
+        assertEquals(false, result.items().getFirst().favorited());
     }
 
     @Test
@@ -125,6 +150,18 @@ class PostServiceTest {
 
         assertEquals(5L, result.id());
         assertEquals(7L, result.authorId());
+    }
+
+    @Test
+    void detailWithViewerAddsInteractionState() {
+        when(postMapper.selectVisibleById(5L)).thenReturn(post(5L, 7L));
+        when(interactionMapper.existsLike(10L, 5L)).thenReturn(false);
+        when(interactionMapper.existsFavorite(10L, 5L)).thenReturn(true);
+
+        PostView result = postService.detail(5L, 10L);
+
+        assertEquals(false, result.liked());
+        assertEquals(true, result.favorited());
     }
 
     @Test
@@ -202,6 +239,8 @@ class PostServiceTest {
         post.setStatus("VISIBLE");
         post.setPublishedAt(LocalDateTime.of(2026, 9, 14, 12, 0));
         post.setUpdatedAt(post.getPublishedAt());
+        post.setLikeCount(0L);
+        post.setFavoriteCount(0L);
         return post;
     }
 }

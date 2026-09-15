@@ -11,6 +11,27 @@ public final class SocialRequestIdentity {
         if (value == null || value.isBlank()) {
             throw invalidUserId();
         }
+        return parseUserId(value);
+    }
+
+    public static Long optionalUserId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return parseUserId(value);
+    }
+
+    public static boolean isAdmin(String value) {
+        return "ADMIN".equals(value);
+    }
+
+    public static void requireAdminRole(String value) {
+        if (!isAdmin(value)) {
+            throw new BusinessException("MODERATION_FORBIDDEN", "只有管理员可以执行内容治理操作");
+        }
+    }
+
+    private static long parseUserId(String value) {
         try {
             long userId = Long.parseLong(value.trim());
             if (userId <= 0) {

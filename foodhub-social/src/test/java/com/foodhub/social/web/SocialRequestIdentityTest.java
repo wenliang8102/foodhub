@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SocialRequestIdentityTest {
 
@@ -24,5 +25,21 @@ class SocialRequestIdentityTest {
                 () -> SocialRequestIdentity.requireUserId(value));
 
         assertEquals("INVALID_USER_ID", exception.getCode());
+    }
+
+    @Test
+    void optionalUserIdAllowsMissingValueAndParsesPresentValue() {
+        assertEquals(null, SocialRequestIdentity.optionalUserId(null));
+        assertEquals(7L, SocialRequestIdentity.optionalUserId(" 7 "));
+    }
+
+    @Test
+    void adminRoleMustBeExactGatewayRole() {
+        assertTrue(SocialRequestIdentity.isAdmin("ADMIN"));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> SocialRequestIdentity.requireAdminRole("admin"));
+
+        assertEquals("MODERATION_FORBIDDEN", exception.getCode());
     }
 }

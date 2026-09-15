@@ -116,6 +116,27 @@ class PostControllerWebMvcTest {
     }
 
     @Test
+    void listAcceptsOptionalGatewayUserId() throws Exception {
+        when(postService.list(1, 20, 7L))
+                .thenReturn(new PostPageView(1, 20, 1, List.of(postView())));
+
+        mockMvc.perform(get("/api/posts").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].liked").value(true));
+
+        verify(postService).list(1, 20, 7L);
+    }
+
+    @Test
+    void listRejectsMalformedOptionalGatewayUserId() throws Exception {
+        mockMvc.perform(get("/api/posts").header("X-User-Id", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_USER_ID"));
+
+        verifyNoInteractions(postService);
+    }
+
+    @Test
     void listRejectsInvalidPagination() throws Exception {
         mockMvc.perform(get("/api/posts?page=0&pageSize=101"))
                 .andExpect(status().isBadRequest())
@@ -133,6 +154,17 @@ class PostControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.id").value(5))
                 .andExpect(jsonPath("$.data.publishedAt")
                         .value("2026-09-14T12:00:00+08:00"));
+    }
+
+    @Test
+    void detailAcceptsOptionalGatewayUserId() throws Exception {
+        when(postService.detail(5L, 7L)).thenReturn(postView());
+
+        mockMvc.perform(get("/api/posts/5").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.favorited").value(true));
+
+        verify(postService).detail(5L, 7L);
     }
 
     @Test
@@ -198,7 +230,12 @@ class PostControllerWebMvcTest {
                 "正文",
                 List.of("https://example.com/a.jpg"),
                 12L,
-                OffsetDateTime.parse("2026-09-14T12:00:00+08:00"));
+                OffsetDateTime.parse("2026-09-14T12:00:00+08:00"),
+                3L,
+                4L,
+                0L,
+                true,
+                true);
     }
 
     @SpringBootConfiguration
