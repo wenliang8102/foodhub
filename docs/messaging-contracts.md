@@ -15,6 +15,9 @@
 Exchange、路由键和队列名称统一声明在 `foodhub-common-messaging` 中。
 生产者和消费者必须使用这些常量，不要在业务代码中重复写字符串。
 
+两个业务服务启动后，Spring AMQP 会根据各自的配置自动声明共享 Exchange、
+本服务负责消费的 Queue 和 Binding。RabbitMQ 容器单独启动时不会预先出现这些业务对象。
+
 | 流程 | Routing key | Queue | 生产者 | 消费者 |
 | --- | --- | --- | --- | --- |
 | 创建秒杀订单 | `coupon.seckill.order.create.v1` | `foodhub.order.seckill-order-create.v1` | `foodhub-coupon` | `foodhub-order` |
