@@ -18,20 +18,18 @@ Flyway、JUnit 5、Mockito、MockMvc。
 
 ## 执行前提
 
-动态基础能力 PR #1 已在 GitHub 合并。企业级路线设计和本计划应先通过文档 PR
-进入 `main`。开始业务实现前必须同步最新 `main`，创建独立分支，并确认基线
-测试通过：
+动态基础能力 PR #1 已在 GitHub 合并。阶段 1 至阶段 6 使用同一个长期功能分支。
+开始业务实现前必须把最新 `origin/main` 合并到该分支，并确认基线测试通过：
 
 ```powershell
 git fetch origin
-git switch main
-git pull --ff-only origin main
-git switch -c codex/social-phase-1
+git switch codex/social-enterprise
+git merge --no-edit origin/main
 .\mvnw.cmd --batch-mode --no-transfer-progress -pl foodhub-social -am test
 ```
 
-预期：当前分支为 `codex/social-phase-1`，最新 `main` 已包含企业级路线设计和
-本计划，Social 基线测试全部通过。
+预期：当前分支为 `codex/social-enterprise`，已包含最新 `main`、企业级路线设计
+和本计划，Social 基线测试全部通过。
 
 ## 文件范围
 
@@ -1337,7 +1335,10 @@ git diff --name-only main...HEAD
 预期：构建成功、工作区干净，并且相对 `main` 的所有变更都位于
 `foodhub-social`。
 
-## 阶段 1 Pull Request 说明
+## 阶段 1 完成记录
+
+阶段 1 不单独创建 Pull Request。完成后保留以下内容，最终在六阶段统一 Pull
+Request 中汇总：
 
 ```markdown
 ## 实现内容
