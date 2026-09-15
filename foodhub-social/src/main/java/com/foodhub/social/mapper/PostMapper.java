@@ -22,7 +22,9 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                    status,
                    published_at AS publishedAt,
                    updated_at AS updatedAt,
-                   deleted_at AS deletedAt
+                   deleted_at AS deletedAt,
+                   like_count AS likeCount,
+                   favorite_count AS favoriteCount
             FROM post
             WHERE status = 'VISIBLE'
             ORDER BY published_at DESC, id DESC
@@ -43,7 +45,9 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                    status,
                    published_at AS publishedAt,
                    updated_at AS updatedAt,
-                   deleted_at AS deletedAt
+                   deleted_at AS deletedAt,
+                   like_count AS likeCount,
+                   favorite_count AS favoriteCount
             FROM post
             WHERE id = #{postId} AND status = 'VISIBLE'
             """)

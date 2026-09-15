@@ -19,6 +19,8 @@ public class PostEntity {
     private LocalDateTime publishedAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
+    private Long likeCount;
+    private Long favoriteCount;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -38,4 +40,8 @@ public class PostEntity {
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+    public Long getLikeCount() { return likeCount; }
+    public void setLikeCount(Long likeCount) { this.likeCount = likeCount; }
+    public Long getFavoriteCount() { return favoriteCount; }
+    public void setFavoriteCount(Long favoriteCount) { this.favoriteCount = favoriteCount; }
 }
