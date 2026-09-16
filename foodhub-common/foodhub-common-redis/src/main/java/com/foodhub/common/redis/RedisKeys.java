@@ -15,6 +15,10 @@ public final class RedisKeys {
         return PREFIX + "merchant:detail:" + merchantId;
     }
 
+    public static String foodDetail(long foodId) {
+        return PREFIX + "food:detail:" + foodId;
+    }
+
     public static String seckillStock(long activityId) {
         return PREFIX + "seckill:stock:" + activityId;
     }
