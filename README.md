@@ -8,6 +8,7 @@ FoodHub 是一个面向本地生活服务的微服务项目，基于 Spring Boot
 - JDK 21
 - 已启用 Linux 容器的 Docker Desktop
 - Git
+- Node.js 20+（运行前端）
 
 不要求全局安装 Maven，直接使用仓库内置的 Maven Wrapper 即可。
 
@@ -48,3 +49,16 @@ merchant 和 social 两个并行开发小组的边界说明见
 
 默认 `local` 配置会从环境变量读取连接信息，并使用仅供开发环境使用的默认值。
 生产环境密钥不得提交到本仓库。
+
+## 启动用户端前端
+
+确保 Gateway 与各业务服务已经启动，然后运行：
+
+```powershell
+cd foodhub-web
+npm install
+npm run dev
+```
+
+浏览器访问 `http://localhost:5173`。开发服务器会把 `/api` 请求代理到
+`http://localhost:8080`，前端无需单独配置各微服务地址。
