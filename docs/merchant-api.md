@@ -1,25 +1,25 @@
 # foodhub-merchant 接口说明
 
-这个文档记录当前 `foodhub-merchant` 已实现的 mock 接口。mock 模式不依赖 MySQL、Redis、Nacos，适合先联调接口契约和前端页面；以后接数据库时保持同一套 URL、请求字段和响应结构。
+这个文档记录当前 `foodhub-merchant` 已实现的接口。服务默认使用 MySQL、Redis 和 Nacos；`mock` 模式不依赖这些基础设施，适合只联调接口契约和前端页面。两种模式保持同一套 URL、请求字段和响应结构。
 
 ## 启动和测试
-
-在项目根目录执行：
-
-```powershell
-cd "D:\Java shixun\foodhub"
-```
 
 单元测试：
 
 ```powershell
-& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.14\ed7edd442f634ac1c1ef5ba2b61b6d690b5221091f1a8e1123f5fadcc967520d\bin\mvn.cmd" --batch-mode --no-transfer-progress -pl foodhub-merchant -am test
+.\mvnw.cmd --batch-mode --no-transfer-progress -pl foodhub-merchant -am test
 ```
 
-启动 mock 服务：
+启动默认的持久化服务：
 
 ```powershell
-& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.14\ed7edd442f634ac1c1ef5ba2b61b6d690b5221091f1a8e1123f5fadcc967520d\bin\mvn.cmd" --batch-mode --no-transfer-progress -f foodhub-merchant\pom.xml spring-boot:run "-Dspring-boot.run.profiles=mock"
+.\mvnw.cmd -pl foodhub-merchant -am spring-boot:run
+```
+
+显式启动 mock 服务：
+
+```powershell
+.\mvnw.cmd -pl foodhub-merchant -am spring-boot:run "-Dspring-boot.run.profiles=mock"
 ```
 
 基础地址：

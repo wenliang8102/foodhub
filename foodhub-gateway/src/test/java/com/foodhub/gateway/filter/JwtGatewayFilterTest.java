@@ -40,6 +40,21 @@ class JwtGatewayFilterTest {
     }
 
     @Test
+    void allowsNonApiHealthEndpointWithoutToken() {
+        ReactiveStringRedisTemplate redis = mock(ReactiveStringRedisTemplate.class);
+        JwtGatewayFilter filter = new JwtGatewayFilter(
+                new JwtTokenService(SECRET, java.time.Duration.ofHours(2)), redis);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        StepVerifier.create(filter.filter(exchange("/actuator/health", null, null), chain))
+                .verifyComplete();
+
+        verify(chain).filter(any());
+        verify(redis, never()).hasKey(any());
+    }
+
+    @Test
     void rejectsMissingTokenForProtectedPath() {
         ReactiveStringRedisTemplate redis = mock(ReactiveStringRedisTemplate.class);
         JwtGatewayFilter filter = new JwtGatewayFilter(new JwtTokenService(SECRET, java.time.Duration.ofHours(2)), redis);
@@ -51,6 +66,65 @@ class JwtGatewayFilterTest {
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         verify(chain, never()).filter(any());
         verify(redis, never()).hasKey(any());
+    }
+
+    @Test
+    void allowsPublicCatalogSocialCouponAndSeckillReadsWithoutToken() {
+        ReactiveStringRedisTemplate redis = mock(ReactiveStringRedisTemplate.class);
+        JwtGatewayFilter filter = new JwtGatewayFilter(
+                new JwtTokenService(SECRET, java.time.Duration.ofHours(2)), redis);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        for (String path : new String[]{
+                "/api/categories", "/api/merchants/1", "/api/foods",
+                "/api/coupons", "/api/coupons/1", "/api/seckill/activities",
+                "/api/seckill/activities/1", "/api/posts", "/api/posts/1",
+                "/api/posts/1/comments"}) {
+            StepVerifier.create(filter.filter(exchange(path, null, "spoofed"), chain))
+                    .verifyComplete();
+        }
+
+        verify(chain, org.mockito.Mockito.times(10)).filter(any());
+        verify(redis, never()).hasKey(any());
+    }
+
+    @Test
+    void keepsPrivateReadsAndWriteRequestsProtected() {
+        ReactiveStringRedisTemplate redis = mock(ReactiveStringRedisTemplate.class);
+        JwtGatewayFilter filter = new JwtGatewayFilter(
+                new JwtTokenService(SECRET, java.time.Duration.ofHours(2)), redis);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+
+        StepVerifier.create(filter.filter(exchange("/api/posts/favorites", null, null), chain))
+                .verifyComplete();
+        StepVerifier.create(filter.filter(
+                        exchange("/api/seckill/activities/1/result", null, null), chain))
+                .verifyComplete();
+        StepVerifier.create(filter.filter(postExchange("/api/posts", null), chain))
+                .verifyComplete();
+
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void injectsIdentityOnPublicReadWhenActiveTokenIsPresent() {
+        ReactiveStringRedisTemplate redis = mock(ReactiveStringRedisTemplate.class);
+        JwtTokenService tokenService = new JwtTokenService(SECRET, java.time.Duration.ofHours(2));
+        String token = tokenService.issue(7L, "alice", "USER");
+        when(redis.hasKey(RedisKeys.loginToken(token))).thenReturn(Mono.just(true));
+        JwtGatewayFilter filter = new JwtGatewayFilter(tokenService, redis);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any())).thenAnswer(invocation -> {
+            ServerWebExchange forwarded = invocation.getArgument(0);
+            assertThat(forwarded.getRequest().getHeaders().getFirst("X-User-Id")).isEqualTo("7");
+            return Mono.empty();
+        });
+
+        StepVerifier.create(filter.filter(exchange("/api/posts/1", token, "spoofed"), chain))
+                .verifyComplete();
+
+        verify(chain).filter(any());
     }
 
     @Test
@@ -95,6 +169,14 @@ class JwtGatewayFilterTest {
         }
         if (spoofedUserId != null) {
             builder.header("X-User-Id", spoofedUserId);
+        }
+        return MockServerWebExchange.from(builder.build());
+    }
+
+    private MockServerWebExchange postExchange(String path, String token) {
+        MockServerHttpRequest.BaseBuilder<?> builder = MockServerHttpRequest.post(path);
+        if (token != null) {
+            builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
         }
         return MockServerWebExchange.from(builder.build());
     }

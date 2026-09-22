@@ -2,8 +2,6 @@ server:
   port: ${SERVER_PORT:8102}
 
 spring:
-  profiles:
-    default: mock
   application:
     name: foodhub-merchant
   datasource:
@@ -52,22 +50,3 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
-
----
-spring:
-  config:
-    activate:
-      on-profile: db
-  cloud:
-    discovery:
-      enabled: false
-    nacos:
-      discovery:
-        enabled: false
-
-management:
-  health:
-    redis:
-      enabled: false
-    discovery:
-      enabled: false

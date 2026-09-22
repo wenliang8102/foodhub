@@ -37,6 +37,9 @@ RabbitMQ 初始交换机、路由键、队列、消息字段和幂等规则见
 merchant 和 social 两个并行开发小组的边界说明见
 [`docs/parallel-development-guide.md`](docs/parallel-development-guide.md).
 
+单台 Docker 服务器的镜像发布和自动部署说明见
+[`docs/deployment.md`](docs/deployment.md).
+
 ## 运行单个服务
 
 ```powershell

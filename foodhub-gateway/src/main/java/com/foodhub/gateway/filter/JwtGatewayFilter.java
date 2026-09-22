@@ -37,13 +37,18 @@ public class JwtGatewayFilter implements GlobalFilter, org.springframework.core.
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
         ServerWebExchange sanitizedExchange = removeIdentityHeaders(exchange);
-        if (!requiresAuthentication(path, exchange.getRequest().getMethod())) {
+        HttpMethod method = exchange.getRequest().getMethod();
+        if (method == HttpMethod.OPTIONS
+                || !path.startsWith("/api/")
+                || isPublicAuthenticationPath(path)) {
             return chain.filter(sanitizedExchange);
         }
 
         String token = resolveToken(exchange.getRequest().getHeaders());
         if (token == null) {
-            return unauthorized(exchange);
+            return isPublicReadPath(path, method)
+                    ? chain.filter(sanitizedExchange)
+                    : unauthorized(exchange);
         }
 
         final JwtPrincipal principal;
@@ -64,18 +69,32 @@ public class JwtGatewayFilter implements GlobalFilter, org.springframework.core.
         return -100;
     }
 
-    private boolean requiresAuthentication(String path, HttpMethod method) {
-        if (method == HttpMethod.OPTIONS || !path.startsWith("/api/")) {
-            return false;
-        }
-        return !isPublicAuthenticationPath(path);
-    }
-
     private boolean isPublicAuthenticationPath(String path) {
         return "/api/auth/login".equals(path)
                 || "/api/auth/register".equals(path)
                 || "/api/auth/login/".equals(path)
                 || "/api/auth/register/".equals(path);
+    }
+
+    private boolean isPublicReadPath(String path, HttpMethod method) {
+        if (method != HttpMethod.GET) {
+            return false;
+        }
+        String normalizedPath = path.length() > 1 && path.endsWith("/")
+                ? path.substring(0, path.length() - 1)
+                : path;
+        return normalizedPath.equals("/api/categories")
+                || normalizedPath.equals("/api/merchants")
+                || normalizedPath.matches("/api/merchants/\\d+")
+                || normalizedPath.equals("/api/foods")
+                || normalizedPath.matches("/api/foods/\\d+")
+                || normalizedPath.equals("/api/coupons")
+                || normalizedPath.matches("/api/coupons/\\d+")
+                || normalizedPath.equals("/api/seckill/activities")
+                || normalizedPath.matches("/api/seckill/activities/\\d+")
+                || normalizedPath.equals("/api/posts")
+                || normalizedPath.matches("/api/posts/\\d+")
+                || normalizedPath.matches("/api/posts/\\d+/comments");
     }
 
     private String resolveToken(HttpHeaders headers) {

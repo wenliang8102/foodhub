@@ -1,5 +1,7 @@
 package com.foodhub.order.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodhub.common.messaging.RabbitMqContracts;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -19,6 +21,21 @@ public class RabbitMqConfig {
     }
 
     @Bean
+    TopicExchange deadLetterExchange() {
+        return new TopicExchange(RabbitMqContracts.DEAD_LETTER_EXCHANGE, true, false);
+    }
+
+    @Bean
+    Queue deadLetterQueue() {
+        return new Queue(RabbitMqContracts.DEAD_LETTER_QUEUE, true);
+    }
+
+    @Bean
+    Binding deadLetterBinding(Queue deadLetterQueue, TopicExchange deadLetterExchange) {
+        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with("#");
+    }
+
+    @Bean
     Queue seckillOrderCreateQueue() {
         return new Queue(RabbitMqContracts.SECKILL_ORDER_CREATE_QUEUE, true);
     }
@@ -31,7 +48,9 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    MessageConverter rabbitMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    MessageConverter rabbitMessageConverter(ObjectMapper objectMapper) {
+        ObjectMapper messagingMapper = objectMapper.copy()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        return new Jackson2JsonMessageConverter(messagingMapper);
     }
 }

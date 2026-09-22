@@ -28,7 +28,7 @@ spring:
             - id: social-service
               uri: lb://foodhub-social
               predicates:
-                - Path=/api/posts/**,/api/follows/**,/api/feed/**
+                - Path=/api/posts/**,/api/follows/**,/api/feed/**,/api/social/maintenance/**
             - id: coupon-service
               uri: lb://foodhub-coupon
               predicates:

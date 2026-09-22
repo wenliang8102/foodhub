@@ -1,0 +1,160 @@
+name: foodhub
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  environment: &service-environment
+    TZ: Asia/Shanghai
+    MYSQL_HOST: mysql
+    MYSQL_PORT: 3306
+    MYSQL_USERNAME: root
+    MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_PORT: 5672
+    RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?set RABBITMQ_USERNAME in .env}
+    RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    NACOS_SERVER_ADDR: nacos:8848
+    FOODHUB_JWT_SECRET: ${FOODHUB_JWT_SECRET:?set FOODHUB_JWT_SECRET in .env}
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    nacos:
+      condition: service_healthy
+
+services:
+  mysql:
+    image: mysql:8.4.6
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.5-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.1.4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?set RABBITMQ_USERNAME in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  nacos:
+    image: nacos/nacos-server:v2.5.1
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    restart: unless-stopped
+
+  gateway:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-gateway:${IMAGE_TAG:?set IMAGE_TAG}
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8080
+    healthcheck: &application-healthcheck
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:$${SERVER_PORT}/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  auth:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-auth:${IMAGE_TAG:?set IMAGE_TAG}
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8101
+    healthcheck: *application-healthcheck
+
+  merchant:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-merchant:${IMAGE_TAG:?set IMAGE_TAG}
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8102
+    healthcheck: *application-healthcheck
+
+  social:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-social:${IMAGE_TAG:?set IMAGE_TAG}
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8103
+    healthcheck: *application-healthcheck
+
+  coupon:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-coupon:${IMAGE_TAG:?set IMAGE_TAG}
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8104
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    healthcheck: *application-healthcheck
+
+  order:
+    <<: *service-defaults
+    image: ${IMAGE_REGISTRY:?set IMAGE_REGISTRY}/foodhub-order:${IMAGE_TAG:?set IMAGE_TAG}
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8105
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    healthcheck: *application-healthcheck
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:

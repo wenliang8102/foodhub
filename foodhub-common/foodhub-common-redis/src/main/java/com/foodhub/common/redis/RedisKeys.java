@@ -22,4 +22,16 @@ public final class RedisKeys {
     public static String seckillStock(long activityId) {
         return PREFIX + "seckill:stock:" + activityId;
     }
+
+    public static String seckillUsers(long activityId) {
+        return PREFIX + "seckill:users:" + activityId;
+    }
+
+    public static String seckillPath(long activityId, long userId) {
+        return PREFIX + "seckill:path:" + activityId + ":" + userId;
+    }
+
+    public static String seckillRequest(long activityId, long userId) {
+        return PREFIX + "seckill:request:" + activityId + ":" + userId;
+    }
 }
